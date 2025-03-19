@@ -32,6 +32,40 @@ struct ParserContext {
     main_sequence: Option<Rc<RefCell<ShogiSequence>>>,
 }
 
+fn display_context_details(sequence: &Rc<RefCell<ShogiSequence>>, depth: usize) {
+    let indent = "  |".repeat(depth); // To indicate the hierarchy visually
+    let seq = sequence.borrow();
+
+
+    println!("{}Startovní číslo tahu: {}", indent, seq.start_move_number);
+
+    if seq.moves.is_empty() {
+        println!("{}Tahy: Žádné tahy nebyly provedeny.", indent);
+    } else {
+        println!("{}Tahy:", indent);
+        for (i, m) in seq.moves.moves.iter().enumerate() {
+            println!("{}{}: {}",indent, i + seq.start_move_number, m);
+        }
+    }
+
+
+    // Display basic information
+    // println!(
+    //     "{} Sequence: start_move={} | moves={:?} | follow_ups={}",
+    //     indent,
+    //     seq.start_move_number,
+    //     seq.moves,
+    //     seq.follow_ups.len()
+    // );
+
+    // Recursively display details of follow-ups
+    for (key, follow_up) in &seq.follow_ups {
+        println!("{}Follow-up key: {}", indent, key);
+        display_context_details(follow_up, depth + 1); // Recursion for nested follow-ups
+    }
+}
+
+
 impl ParserContext {
     // Konstruktor ParserContext
     pub fn new(context_name: &str) -> Self {
@@ -260,6 +294,9 @@ fn create_variation(
     variation_moves: Vec<Move>,
     new_key: String,
 ) {
+
+    println!("create_variation START");
+
     if let Some(current_sequence) = &ctx.current_sequence {
         let mut parent_sequence = Rc::clone(&current_sequence);
 
@@ -282,21 +319,28 @@ fn create_variation(
                 return;
             }
         }
-
-
         // Nyní máme správného rodiče v `parent_sequence`
 
+        // split should be performed, only if starting move of variation is not
         let should_split = {
             let sequence = parent_sequence.borrow();
+
             variation_start_move > sequence.start_move_number
                 && variation_start_move < sequence.start_move_number + sequence.moves.len()
         };
 
         if should_split {
+            println!("parent seq number of moves: {}", parent_sequence.borrow_mut().moves.len() );
+
+            let mut parent = parent_sequence.borrow_mut();
+
             let remaining_moves = {
-                let mut sequence = parent_sequence.borrow_mut();
-                sequence.split_at_move(variation_start_move)
+                //let mut sequence = parent_sequence.borrow_mut();
+                parent.split_at_move(variation_start_move)
             };
+
+            println!("parent seq number of moves adfter split: {}", parent.moves.len() );
+            println!("parent seq number of moves: {}", remaining_moves.len() );
 
             let new_variation = create_sequence(
                 remaining_moves.clone(),
@@ -304,28 +348,42 @@ fn create_variation(
                 variation_start_move,
             );
 
+            //let parent = parent_sequence.clone();
+            println!("parent current amount of follow_ups: {}", parent.follow_ups.len() );
 
+            for k in parent.follow_ups.keys() {
+                println!("parent follow_up key: {}", k );
+            }
+
+            let tempMap: HashMap<String, Rc<RefCell< crate::ShogiSequence >>> =
+                parent
+                    .follow_ups
+                    .drain()
+                    .collect();
 
             let key = match new_variation.borrow().moves.moves.first().unwrap() {
                 Move::OkMove(mv) => format!("{}", mv.move_str),
                 _ => "".to_string()
             };
 
-            add_follow_up(
-                parent_sequence.clone(),
-                remaining_moves,
-                key,//format!("variation_at_move_{}", variation_start_move),
-                variation_start_move,
-            );
+            parent
+                .follow_ups
+                .insert(key, new_variation.clone());
 
-            let new_seq = add_follow_up(
-                parent_sequence,
+            new_variation
+                .borrow_mut()
+                .follow_ups
+                .extend(tempMap);
+
+            let new_seq = create_sequence(
                 Vec::new(),
-                new_key,
+                Rc::downgrade(&parent_sequence),
                 variation_start_move
             );
 
-
+            parent
+                .follow_ups
+                .insert(new_key, new_seq.clone());
 
             ctx.current_sequence = Some(new_seq);
         } else {
@@ -335,18 +393,18 @@ fn create_variation(
                 variation_start_move,
             );
 
-            add_follow_up(
-                parent_sequence,
-                variation_moves,
-                format!("variation_at_move_{}", variation_start_move),
-                variation_start_move,
-            );
+            let key = format!("variation_at_move_{}", variation_start_move);
+            let follow_up = create_sequence(variation_moves, Rc::downgrade(&parent_sequence), variation_start_move);
+            parent_sequence.borrow_mut().follow_ups.insert(key, follow_up.clone());
+            follow_up;
 
             ctx.current_sequence = Some(new_variation);
         }
     } else {
         eprintln!("Chyba: Neexistuje aktuální sekvence pro vytvoření variace!");
     }
+
+    println!("create_variation END");
 }
 
 
@@ -524,7 +582,15 @@ mod tests {
 
         println!("{}", context.current_sequence.as_ref().unwrap().borrow().moves.len());
 
-        context.display_context_details();
+        if let Some(current_sequence) = &context.main_sequence {
+            println!("Displaying ShogiSequence context and follow-ups:");
+            display_context_details(current_sequence, 1);
+        } else {
+            println!("No current sequence to display.");
+        }
+
+
+        //display_context_details(context.main_sequence, 1);
 
         create_variation(&mut context, 3, Vec::new(), String::from("M3v"));
 
@@ -533,8 +599,22 @@ mod tests {
             move_str: "M3v".to_string(),
         }));
 
+        //context.display_context_details();
+        if let Some(current_sequence) = &context.main_sequence {
+            println!("Displaying ShogiSequence context and follow-ups:");
+            display_context_details(current_sequence, 1);
+        } else {
+            println!("No current sequence to display.");
+        }
+
         create_variation(&mut context, 2, Vec::new(), String::from("M2vv"));
 
-        context.display_context_details();
+        //context.display_context_details();
+        if let Some(current_sequence) = &context.main_sequence {
+            println!("Displaying ShogiSequence context and follow-ups:");
+            display_context_details(current_sequence, 1);
+        } else {
+            println!("No current sequence to display.");
+        }
     }
 }
