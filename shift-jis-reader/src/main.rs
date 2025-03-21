@@ -89,7 +89,7 @@ impl ParserContext {
             match game_move {
                 Move::OkMove(ref m) => {
                     current_seq.moves.moves.push(game_move.clone());
-                    println!("add_move {} for sequence: {}", m.move_str, self.current_sequence);
+                    //println!("add_move {} for sequence: {}", m.move_str, self.current_sequence);
                 }
                 Move::NoMove(_) => {}
             }
@@ -123,30 +123,43 @@ impl ParserContext {
 
         let parent_move_number = start_move_number - 1;
 
-
+        //println!("New variation starting at move {}", start_move_number);
 
         while let Some(seq) = self.seqs.get(&parent_uuid) {
+            //println!("looking for parent for move {} in seq {}-{}", parent_move_number, seq.start_move_number, seq.start_move_number + seq.moves.len() -1);
             if parent_move_number >= seq.start_move_number && parent_move_number < seq.start_move_number + seq.moves.len() {
-                println!("found parent for move {} containing moves {}-{}", parent_move_number, seq.start_move_number, seq.start_move_number + seq.moves.len());
+                //println!("found parent for move {} containing moves {}-{} in {}", parent_move_number, seq.start_move_number, seq.start_move_number + seq.moves.len()-1, parent_uuid);
                 break;
             }
             parent_uuid = seq.parent;
         }
 
         if let Some(mut c_s) = self.seqs.get_mut(&parent_uuid) {
-            println!("found parent for move {} containing moves {}-{}", parent_move_number, c_s.start_move_number, c_s.start_move_number + c_s.moves.len());
+            //println!("found parent for move {} containing moves {}-{}", parent_move_number, c_s.start_move_number, c_s.start_move_number + c_s.moves.len() -1);
 
-            let remaining_moves = c_s.split_at_move(parent_move_number);
 
-            let seq = ShogiSequence {
-                moves: MoveVec::new(remaining_moves, start_move_number),
-                follow_ups: HashMap::new(),
-                parent: parent_uuid,
-                start_move_number,
-            };
+            //println!("splitting parent at move {}", parent_move_number+1);
+            let remaining_moves = c_s.split_at_move(parent_move_number+1);
 
-            let uuid = Uuid::new_v4();
-            self.seqs.insert(uuid, seq);
+            //println!("old sequence after split: {}-{}", c_s.start_move_number, c_s.start_move_number + c_s.moves.len() -1);
+
+            if (remaining_moves.len() > 0) {
+                let seq = ShogiSequence {
+                    moves: MoveVec::new(remaining_moves, start_move_number),
+                    follow_ups: HashMap::new(),
+                    parent: parent_uuid,
+                    start_move_number,
+                };
+
+                //println!("new sequence after split: {}-{}", seq.start_move_number, seq.start_move_number + seq.moves.len() -1);
+
+                let uuid = Uuid::new_v4();
+                self.seqs.insert(uuid, seq);
+            } else {
+
+            }
+
+
 
             let seq_new = ShogiSequence {
                 moves: MoveVec::new(vec![], start_move_number),
@@ -160,6 +173,8 @@ impl ParserContext {
 
             self.current_sequence = uuid_new;
 
+        } else {
+            //println!("could not find parent for move {}", parent_move_number);
         }
 
 
