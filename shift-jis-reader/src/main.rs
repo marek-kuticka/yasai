@@ -6,7 +6,7 @@ use encoding_rs_io::DecodeReaderBytesBuilder;
 use std::time::{Instant};
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Index;
 use std::rc::{Rc, Weak};
 
@@ -67,7 +67,7 @@ impl ParserContext {
 
         let seq = ShogiSequence {
             moves: MoveVec::new(vec![], start_move_number),
-            follow_ups: HashMap::new(),
+            follow_ups: HashSet::new(),
             parent,
             start_move_number,
         };
@@ -79,6 +79,30 @@ impl ParserContext {
         println!("create_sequence END with new sequence: {}", uuid);
 
         uuid
+    }
+
+    pub fn dump_sequences(&self, msg: String) {
+        println!("{} Sekvence v kontextu:", msg);
+        for (uuid, seq) in &self.seqs {
+            println!("uuid: {}, start_move_number: {}, moves: {}", uuid, seq.start_move_number, seq.moves.len());
+
+            for uuid in seq.follow_ups.iter() {
+                println!("  follow_up uuid: {}", uuid);
+            }
+
+            println!("  moves:");
+
+            for (i, m) in seq.moves.moves.iter().enumerate() {
+                match m {
+                    Move::OkMove(ref m) => {
+                        println!("  {}: {}", i + seq.start_move_number, m.move_str);
+                    }
+                    Move::NoMove(_) => {}
+                }
+            }
+        }
+
+        println!("\n\n");
     }
 
     // Přidání nového tahu do current_sequence
@@ -134,42 +158,52 @@ impl ParserContext {
             parent_uuid = seq.parent;
         }
 
+        let mut seqs_temp: HashMap<Uuid, ShogiSequence> = HashMap::new();
+
         if let Some(mut c_s) = self.seqs.get_mut(&parent_uuid) {
             //println!("found parent for move {} containing moves {}-{}", parent_move_number, c_s.start_move_number, c_s.start_move_number + c_s.moves.len() -1);
 
-
             //println!("splitting parent at move {}", parent_move_number+1);
+
+            // if split move is last move of sequence -> no need to split
+            // if c_s.start_move_number + c_s.moves.len() -1 < parent_move_number {}
             let remaining_moves = c_s.split_at_move(parent_move_number+1);
 
             //println!("old sequence after split: {}-{}", c_s.start_move_number, c_s.start_move_number + c_s.moves.len() -1);
 
             if (remaining_moves.len() > 0) {
-                let seq = ShogiSequence {
+                let mut seq = ShogiSequence {
                     moves: MoveVec::new(remaining_moves, start_move_number),
-                    follow_ups: HashMap::new(),
+                    follow_ups: HashSet::new(),
                     parent: parent_uuid,
                     start_move_number,
                 };
 
+                //let old_follow_ups = c_s.follow_ups.drain();
+                for i in c_s.follow_ups.drain() {
+                    seq.follow_ups.insert(i);
+                }
                 //println!("new sequence after split: {}-{}", seq.start_move_number, seq.start_move_number + seq.moves.len() -1);
 
                 let uuid = Uuid::new_v4();
-                self.seqs.insert(uuid, seq);
+                seqs_temp.insert(uuid, seq);
+
+                c_s.follow_ups.insert(uuid);
+                //uuids.insert(uuid);
             } else {
 
             }
 
-
-
             let seq_new = ShogiSequence {
                 moves: MoveVec::new(vec![], start_move_number),
-                follow_ups: HashMap::new(),
+                follow_ups: HashSet::new(),
                 parent: parent_uuid,
                 start_move_number,
             };
 
             let uuid_new = Uuid::new_v4();
-            self.seqs.insert(uuid_new, seq_new);
+            seqs_temp.insert(uuid_new, seq_new);
+            c_s.follow_ups.insert(uuid_new);
 
             self.current_sequence = uuid_new;
 
@@ -177,7 +211,7 @@ impl ParserContext {
             //println!("could not find parent for move {}", parent_move_number);
         }
 
-
+        self.seqs.extend(seqs_temp);
 
     }
 
@@ -240,10 +274,10 @@ fn display_context_details(sequence: &Rc<RefCell<ShogiSequence>>, depth: usize) 
     }
 
     // Recursively display details of follow-ups
-    for (key, follow_up) in &seq.follow_ups {
-        println!("{}Follow-up key: {}", indent, key);
-        //display_context_details(follow_up, depth + 1); // Recursion for nested follow-ups
-    }
+    // for (key, follow_up) in &seq.follow_ups {
+    //     println!("{}Follow-up key: {}", indent, key);
+    //     //display_context_details(follow_up, depth + 1); // Recursion for nested follow-ups
+    // }
 }
 
 
@@ -314,7 +348,7 @@ fn read_shift_jis_lines(filename: &str) -> io::Result<Vec<String>> {
 #[derive(Debug, Clone)]
 struct ShogiSequence {
     moves: MoveVec<Move>,
-    follow_ups: HashMap<Uuid, ShogiSequence>,
+    follow_ups: HashSet<Uuid>,
     parent: Uuid,
     start_move_number: usize,
 }
@@ -572,7 +606,7 @@ fn create_context(ctx: &mut ParserContext, line: &str)  {
 
 fn main() -> io::Result<()> {
     // Replace "your_file.txt" with the actual path to your Shift-JIS file.
-    let filename = "sample.kif";
+    let filename = "/Users/marek/RustroverProjects/yasai2/shift-jis-reader/sample.kif";
 
     let root = Uuid::new_v4();
 
@@ -682,6 +716,8 @@ fn main() -> io::Result<()> {
     println!("Parsed file: {}", filename);
     let duration = start.elapsed();
     println!("Program executed in: {:?}", duration);
+
+    context.dump_sequences(String::from("main"));
     Ok(())
 }
 
@@ -693,19 +729,23 @@ mod tests {
 
     #[test]
     fn test_parse_number_from_line() {
+
+        let uuid = Uuid::new_v4();
         let mut context: ParserContext = ParserContext {
             line_num_from: 0,
             line_num_to: 0,
             move_from: 0,
             move_to: 0,
 
+            seqs: Default::default(),
             is_initialized: false,
             context_name: String::from("main"),
-            current_sequence: None,
-            main_sequence: None,
+            current_sequence: uuid,
+            main_sequence: uuid,
         };
 
-        create_context(&mut context, "1234567890");
+        //create_context(&mut context, "1234567890");
+        context.create_sequence(1);
 
         context.add_move(Move::OkMove(MoveInfo {
             line_num: 1,
@@ -727,7 +767,12 @@ mod tests {
             move_str: "M4".to_string(),
         }));
 
-        println!("{}", context.current_sequence.as_ref().unwrap().borrow().moves.len());
+
+        if let Some(c_sequence) = context.seqs.get(&context.current_sequence) {
+            println!("Current seq has {} moves", c_sequence.moves.len());
+        }
+
+        context.dump_sequences(String::from("main"));
 
         // if let Some(current_sequence) = &context.main_sequence {
         //     println!("Displaying ShogiSequence context and follow-ups:");
@@ -748,6 +793,8 @@ mod tests {
             move_str: "M3v".to_string(),
         }));
 
+        context.dump_sequences(String::from("after v1 from move 3"));
+
         //context.display_context_details();
         // if let Some(current_sequence) = &context.main_sequence {
         //     println!("Displaying ShogiSequence context and follow-ups:");
@@ -758,6 +805,23 @@ mod tests {
 
         //create_variation(&mut context, 2, Vec::new(), String::from("M2vv"));
         context.add_variation(2);
+
+        context.add_move(Move::OkMove(MoveInfo {
+            line_num: 2,
+            move_str: "M2vv".to_string(),
+        }));
+
+        context.add_move(Move::OkMove(MoveInfo {
+            line_num: 3,
+            move_str: "M3vv".to_string(),
+        }));
+
+        context.add_move(Move::OkMove(MoveInfo {
+            line_num: 4,
+            move_str: "M4vv".to_string(),
+        }));
+
+        context.dump_sequences(String::from("after v2 from move 2"));
 
         //context.display_context_details();
         // if let Some(current_sequence) = &context.main_sequence {
