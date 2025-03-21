@@ -151,6 +151,7 @@ impl ParserContext {
         let mut seqs_temp: HashMap<Uuid, ShogiSequence> = HashMap::new();
 
         if let Some(mut c_s) = self.seqs.get_mut(&parent_uuid) {
+
             let remaining_moves = c_s.split_at_move(parent_move_number+1);
 
             if (remaining_moves.len() > 0) {
@@ -188,7 +189,7 @@ impl ParserContext {
             self.current_sequence = uuid_new;
 
         } else {
-            //println!("could not find parent for move {}", parent_move_number);
+            panic!("could not find parent for move {}", parent_move_number);
         }
 
         self.seqs.extend(seqs_temp);
@@ -484,20 +485,7 @@ mod tests {
 
         context.dump_sequences(String::from("main"));
 
-        // if let Some(current_sequence) = &context.main_sequence {
-        //     println!("Displaying ShogiSequence context and follow-ups:");
-        //     display_context_details(current_sequence, 1);
-        // } else {
-        //     println!("No current sequence to display.");
-        // }
-
-
-        //display_context_details(context.main_sequence, 1);
-
-        //create_variation(&mut context, 3, Vec::new(), String::from("M3v"));
-
         context.add_variation(3);
-
         context.add_move(Move::OkMove(MoveInfo {
             line_num: 3,
             move_str: "M3v".to_string(),
@@ -505,27 +493,15 @@ mod tests {
 
         context.dump_sequences(String::from("after v1 from move 3"));
 
-        //context.display_context_details();
-        // if let Some(current_sequence) = &context.main_sequence {
-        //     println!("Displaying ShogiSequence context and follow-ups:");
-        //     display_context_details(current_sequence, 1);
-        // } else {
-        //     println!("No current sequence to display.");
-        // }
-
-        //create_variation(&mut context, 2, Vec::new(), String::from("M2vv"));
         context.add_variation(2);
-
         context.add_move(Move::OkMove(MoveInfo {
             line_num: 2,
             move_str: "M2vv".to_string(),
         }));
-
         context.add_move(Move::OkMove(MoveInfo {
             line_num: 3,
             move_str: "M3vv".to_string(),
         }));
-
         context.add_move(Move::OkMove(MoveInfo {
             line_num: 4,
             move_str: "M4vv".to_string(),
@@ -533,12 +509,5 @@ mod tests {
 
         context.dump_sequences(String::from("after v2 from move 2"));
 
-        //context.display_context_details();
-        // if let Some(current_sequence) = &context.main_sequence {
-        //     println!("Displaying ShogiSequence context and follow-ups:");
-        //     display_context_details(current_sequence, 1);
-        // } else {
-        //     println!("No current sequence to display.");
-        // }
     }
 }
