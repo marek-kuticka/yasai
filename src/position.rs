@@ -173,6 +173,12 @@ impl Position {
             attack_info: AttackInfo::new(checkers, &self.inner),
         });
     }
+
+
+    pub fn states_len(&mut self) -> usize {
+        self.states.len()
+    }
+
     pub fn undo_move(&mut self, m: Move) {
         let c = self.side_to_move().flip();
         match m {
@@ -444,6 +450,7 @@ impl AttackInfo {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
     use super::*;
     use shogi_core::PartialPosition;
     use shogi_usi_parser::FromUsi;
@@ -519,6 +526,7 @@ mod tests {
         // do moves
         for &m in moves.iter() {
             pos.do_move(m);
+            println!("{:?}", pos.occupied_bitboard())
         }
         // check moved pieces, position states
         for (sq, expected) in [
@@ -550,6 +558,7 @@ mod tests {
         // revert to default position
         for &m in moves.iter().rev() {
             pos.undo_move(m);
+            //pos.fmt()
         }
         let default = Position::default();
         assert!(Square::all().all(|sq| pos.piece_at(sq) == default.piece_at(sq)));

@@ -3,7 +3,7 @@ extern crate test;
 
 #[cfg(test)]
 mod movegen {
-    use shogi_core::PartialPosition;
+    use shogi_core::{Move, PartialPosition, Square};
     use shogi_usi_parser::FromUsi;
     use test::Bencher;
     use yasai::Position;
@@ -11,7 +11,9 @@ mod movegen {
     #[bench]
     fn bench_legal_moves_from_default(b: &mut Bencher) {
         b.iter(|| {
-            let pos = Position::default();
+            let mut pos = Position::default();
+            pos.do_move(Move::from_usi("e2e4").unwrap());
+            pos.piece_at(Square::new(1,1).unwrap());
             assert_eq!(30, pos.legal_moves().len());
         });
     }
